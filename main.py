@@ -9,21 +9,50 @@ from matplotlib.animation import PillowWriter
 import warnings
 warnings.filterwarnings("ignore")
 
+# %% [markdown]
+# $r_{ij} = r_i - r_j$
+# $$
+# U(r_{ij}) = 4\varepsilon [(\sigma/r_{ij})^{12} - (\sigma/r_{ij})^6] \\
+# U^*(r_{ij}) = 4[(r_{ij}^*)^{-12} - (r_{ij}^*)^{-6}] \\
+# $$
+# Force atom $j$ exerts on $i$
+# $$
+# \vec{F}^*(r_{ij}) = 48[(r_{ij}^*)^{-6} - 0.5](r_{ij}^*)^{-8} \vec{r_{ij}^*} \\
+# $$
+
 # %%
-class Symbolic():
-    epsilon = sp.Symbol("epsilon")
-    sigma = sp.Symbol("sigma")
-    r = sp.Symbol("r")
-    lj_potential = 4*epsilon*((sigma/r)**12 - (sigma/r)**6)
-    lj_force = -sp.diff(lj_potential,r)
+def magnitude2(x):
+    return (x*x).sum(axis=0)
 
+def lj_U(x):
+    return 4*(x**-6 - 1)*x**-6
 
-func_lj_potential = sp.lambdify(Symbolic.r,Symbolic.lj_potential.subs({Symbolic.epsilon:1, Symbolic.sigma:1}))
-func_lj_force = sp.lambdify(Symbolic.r,Symbolic.lj_force.subs({Symbolic.epsilon:1, Symbolic.sigma:1}))
+def lj_U_vec(r):
+    r2 = magnitude2(r)
+    return 4*(r2**-3 - 1)*r2**-3
 
+def lj_F_vec(r):
+    r2 = magnitude2(r)
+    return -48*(r2**-3 - 0.5)*r2**-4 * r
+
+print("testing with r as [xs, ys]")
+r = np.array([[1,2,3],[2,3,4]], dtype=float)
+print(magnitude2(r))
+print(lj_U_vec(r))
+print(lj_F_vec(r))
+
+print()
+print("testing with r as [x matrix, y matrix]")
+rmat = np.array([
+    [[1,1,1],[2,2,2],[3,3,3]],
+    [[2,3,4],[2,3,4],[2,3,4]],
+], dtype=float)
+print(magnitude2(rmat))
+print(lj_U_vec(rmat))
+print(lj_F_vec(rmat))
 
 x = np.linspace(0.95,4,100)
-plt.plot(x,func_lj_potential(x))
+plt.plot(x,lj_U(x))
 
 plt.title("Lennard-Jones Potential vs Distance")
 plt.xlabel("Distance r (a.u.)")
@@ -42,7 +71,7 @@ X_U_MIN = 2**(1/6)*1
 CONTAINER_FACTOR = 1.5
 LATTICE_CONSTANT = 1.2
 
-L = 20
+L = 3
 N = L*L
 DIM = 2
 X_LOWER,X_UPPER = -(L/2)*CONTAINER_FACTOR,(L/2)*CONTAINER_FACTOR
@@ -61,6 +90,7 @@ r = generate_square_lattice(L,L)
 # print(r)
 r = np.vstack(list(map(np.concatenate,r)))
 # print(r)
+r += np.random.uniform(-0.1,0.1,r.shape)
 
 # r = np.array([[0,0],[0.5,1],[1,0.3]]).T
 # v = rng.uniform(V_LOWER, V_UPPER, (DIM,N))
@@ -90,21 +120,23 @@ def pair_distances(r):
     return magnitudes(pair_displacements(r))
 
 displacements = pair_displacements(r)
-distances = pair_distances(r)
-unit_displacements = pair_displacements(r) / pair_distances(r)
+distances = pair_distances(r) # dont use
+# unit_displacements = pair_displacements(r) / pair_distances(r)
 # unit_displacements[np.isnan(unit_displacements)] = 0
 
-potential_energies = func_lj_potential(distances)
-potential_energies[np.isnan(potential_energies)] = 0
+print(displacements.shape)
+
+potential_energies = lj_U_vec(displacements)
+# potential_energies[np.isnan(potential_energies)] = 0
 potential_energy = potential_energies.sum()
 potential_energy_av = potential_energy / N
-print(potential_energy_av)
+# print(potential_energy_av)
 
-lj_forces = - unit_displacements * func_lj_force(distances)
+lj_forces = lj_F_vec(displacements)
 lj_forces[np.isnan(lj_forces)] = 0
+print(lj_forces.shape)
 net_lj_force = lj_forces.sum(axis=2)
-# print(lj_forces)
-# print(net_lj_force)
+print(net_lj_force)
 
 # plt.quiver(np.repeat(r[0],N),np.repeat(r[1],N), displacements[0,:,:].ravel(),displacements[1,:,:].ravel(), angles="xy", scale=1, scale_units="xy")
 def plot_each_arrow(r,A,color=None):
@@ -114,40 +146,41 @@ def plot_each_arrow(r,A,color=None):
         *[A[i,:,:].ravel() for i in range(DIM)],
         color,
         angles="xy", scale=1, scale_units="xy")
-# plot_each_arrow(r,lj_forces)
-
-# plt.title("Displacement Vectors")
-# plt.xlabel("x (a.u.)")
-# plt.ylabel("y (a.u.)")
-# plot_each_arrow(r,displacements,distances)
+# plot_each_arrow(r,lj_forces,magnitudes(lj_forces))
 # plt.show()
+plt.title("Displacement Vectors")
+plt.xlabel("x (a.u.)")
+plt.ylabel("y (a.u.)")
+plot_each_arrow(r,displacements,magnitudes(displacements))
+plt.show()
 
-# plt.title("Lennard-Jones Force Vectors")
-# plt.xlim(X_LOWER*1.2, X_UPPER*1.2)
-# plt.ylim(X_LOWER*1.2, X_UPPER*1.2)
-# plt.xlabel("x (a.u.)")
-# plt.ylabel("y (a.u.)")
-# plot_each_arrow(
-#     r,
-#     lj_forces / magnitudes(lj_forces),
-#     np.clip(magnitudes(lj_forces),0,EPSILON),
-# )
-# plt.colorbar()
-# plt.text(X_LOWER,X_LOWER, "Forces are clipped with upper bound 1")
-# plt.show()
+plt.title("Lennard-Jones Force Vectors")
+plt.xlim(X_LOWER*1.2, X_UPPER*1.2)
+plt.ylim(X_LOWER*1.2, X_UPPER*1.2)
+plt.xlabel("x (a.u.)")
+plt.ylabel("y (a.u.)")
+plot_each_arrow(
+    r,
+    lj_forces / magnitudes(lj_forces),
+    np.clip(magnitudes(lj_forces),0,1),
+)
+plt.colorbar()
+plt.text(X_LOWER,X_LOWER, "Forces are clipped with upper bound 1")
+plt.show()
 
-# plt.title("Lennard-Jones Net Force Vectors")
-# plt.xlim(X_LOWER*1.2, X_UPPER*1.2)
-# plt.ylim(X_LOWER*1.2, X_UPPER*1.2)
-# plt.xlabel("x (a.u.)")
-# plt.ylabel("y (a.u.)")
-# plt.quiver(*r, *net_lj_force, angles="xy", )
-# plt.show()
+plt.title("Lennard-Jones Net Force Vectors")
+plt.xlim(X_LOWER*1.2, X_UPPER*1.2)
+plt.ylim(X_LOWER*1.2, X_UPPER*1.2)
+plt.xlabel("x (a.u.)")
+plt.ylabel("y (a.u.)")
+plt.quiver(*r, *net_lj_force, angles="xy", )
+plt.show()
 
 # %%
 def calc_F_lj(r):
-    unit_displacements = pair_displacements(r) / pair_distances(r)
-    lj_forces = - unit_displacements * func_lj_force(distances)
+    # unit_displacements = pair_displacements(r) / pair_distances(r)
+    displacements = pair_displacements(r)
+    lj_forces = lj_F_vec(displacements)
     lj_forces[np.isnan(lj_forces)] = 0
     net_lj_force = lj_forces.sum(axis=2)
     return net_lj_force
