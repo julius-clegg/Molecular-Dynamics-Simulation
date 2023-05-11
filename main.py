@@ -22,46 +22,6 @@ warnings.filterwarnings("ignore")
 # $$
 
 # %%
-def magnitude2(x):
-    return (x*x).sum(axis=0)
-
-def f_U_lj(x):
-    return 4*(x**-6 - 1)*x**-6
-
-def f_U_lj_vec(r):
-    r2 = magnitude2(r)
-    return 4*(r2**-3 - 1)*r2**-3
-
-def f_F_lj_vec(r):
-    r2 = magnitude2(r)
-    return -48*(r2**-3 - 0.5)*r2**-4 * r
-
-print("testing with r as [xs, ys]")
-r = np.array([[1,2,3],[2,3,4]], dtype=float)
-print(magnitude2(r))
-print(f_U_lj_vec(r))
-print(f_F_lj_vec(r))
-
-print()
-print("testing with r as [x matrix, y matrix]")
-rmat = np.array([
-    [[1,1,1],[2,2,2],[3,3,3]],
-    [[2,3,4],[2,3,4],[2,3,4]],
-], dtype=float)
-print(magnitude2(rmat))
-print(f_U_lj_vec(rmat))
-print(f_F_lj_vec(rmat))
-
-x = np.linspace(0.95,4,100)
-plt.plot(x,f_U_lj(x))
-
-plt.title("Lennard-Jones Potential vs Distance")
-plt.xlabel("Distance r (a.u.)")
-plt.ylabel("Energy U (a.u.)")
-plt.show()
-
-
-# %%
 # SET UP RANDOM INITIAL CONDITIONS
 rng = np.random.default_rng(seed=102)
 
@@ -100,6 +60,48 @@ plt.scatter(*r)
 plt.show()
 
 # %%
+def magnitude2(x):
+    return (x*x).sum(axis=0)
+
+def pair_U_lj(x):
+    return 4*(x**-6 - 1)*x**-6
+
+U_CUTOFF = pair_U_lj(L/2)
+
+def pair_U_lj_vec(r):
+    r2 = magnitude2(r)
+    return 4*(r2**-3 - 1)*r2**-3 - U_CUTOFF
+
+def pair_F_lj_vec(r):
+    r2 = magnitude2(r)
+    return -48*(r2**-3 - 0.5)*r2**-4 * r
+
+print("testing with r as [xs, ys]")
+rtest = np.array([[1,2,3],[2,3,4]], dtype=float)
+print(magnitude2(rtest))
+print(pair_U_lj_vec(rtest))
+print(pair_F_lj_vec(rtest))
+
+print()
+print("testing with r as [x matrix, y matrix]")
+rmat = np.array([
+    [[1,1,1],[2,2,2],[3,3,3]],
+    [[2,3,4],[2,3,4],[2,3,4]],
+], dtype=float)
+print(magnitude2(rmat))
+print(pair_U_lj_vec(rmat))
+print(pair_F_lj_vec(rmat))
+
+x = np.linspace(0.95,4,100)
+plt.plot(x,pair_U_lj(x))
+
+plt.title("Lennard-Jones Potential vs Distance")
+plt.xlabel("Distance r (a.u.)")
+plt.ylabel("Energy U (a.u.)")
+plt.show()
+
+
+# %%
 x = r[0]
 def pair_displacements_1D(x):
     x = -np.diff(np.meshgrid(x,x),axis=0)[0]
@@ -119,13 +121,13 @@ displacements = pair_displacements(r)
 
 diag_mask = np.identity(N,dtype=int)==1
 
-Us = f_U_lj_vec(displacements)
+Us = pair_U_lj_vec(displacements)
 Us[diag_mask] = 0
 U = Us.sum()
 U_av = U / N
 print(U_av)
 
-F_lj = f_F_lj_vec(displacements)
+F_lj = pair_F_lj_vec(displacements)
 F_lj[:,diag_mask] = 0
 print(F_lj.shape)
 F_net = F_lj.sum(axis=2)
@@ -171,30 +173,31 @@ plt.quiver(*r, *F_net, angles="xy", )
 plt.show()
 
 # %%
-def calc_U_av(r):
-    global N
-    displacements = pair_displacements(r)
-    Us = f_U_lj_vec(displacements)
-    Us[diag_mask] = 0
-    return Us.sum() / N
+class Calculate():
+    def U_av(r):
+        global N
+        displacements = pair_displacements(r)
+        Us = pair_U_lj_vec(displacements)
+        Us[diag_mask] = 0
+        return Us.sum() / N
 
-def calc_F_lj(r):
-    global N
-    displacements = pair_displacements(r)
-    diag_mask = np.identity(N,dtype=int)==1
+    def F_lj(r):
+        global N
+        displacements = pair_displacements(r)
+        diag_mask = np.identity(N,dtype=int)==1
 
-    lj_forces = f_F_lj_vec(displacements)
-    lj_forces[:,diag_mask] = 0
-    net_lj_force = lj_forces.sum(axis=2)
-    return net_lj_force
+        lj_forces = pair_F_lj_vec(displacements)
+        lj_forces[:,diag_mask] = 0
+        net_lj_force = lj_forces.sum(axis=2)
+        return net_lj_force
 
-def calc_a(r):
-    return calc_F_lj(r)
+    def a(r):
+        return Calculate.F_lj(r)
 
 def velocity_verlet(r,v,dt):
-    a1 = calc_a(r)
+    a1 = Calculate.a(r)
     r = r + v*dt + a1/2 * dt**2
-    a2 = calc_a(r)
+    a2 = Calculate.a(r)
     v = v + (a1+a2)/2*dt
     return r,v
 
@@ -231,24 +234,26 @@ steps = int(t_total//dt)
 rs, vs = time_evolution(r,v,steps,dt)
 
 # %%
-fig, ax = plt.subplots(1,1, figsize=(5,5))
-points = ax.scatter(*rs[0])
+ANIMATE = True
+if ANIMATE:
+    fig, ax = plt.subplots(1,1, figsize=(5,5))
+    points = ax.scatter(*rs[0])
 
-k = int(0.01//dt)
-nframes = steps // k
+    k = int(0.01//dt)
+    nframes = steps // k
 
-ax.set_xlim(0, L)
-ax.set_ylim(0, L)
-def animation_frame(i):
-    points.set_offsets(rs[i*k].T)
+    ax.set_xlim(0, L)
+    ax.set_ylim(0, L)
+    def animation_frame(i):
+        points.set_offsets(rs[i*k].T)
 
-lj_anim = animation.FuncAnimation(fig, animation_frame, frames=nframes)
-lj_anim.save("test.gif", writer="pillow", fps=30, dpi=100)
+    lj_anim = animation.FuncAnimation(fig, animation_frame, frames=nframes)
+    lj_anim.save("test.gif", writer="pillow", fps=30, dpi=100)
 
 # %%
 t = np.arange(steps)*dt
 KE_t = (vs**2).sum(axis=(1,2))/N/2
-U_t = np.array([calc_U_av(r) for r in rs])
+U_t = np.array([Calculate.U_av(r) for r in rs])
 
 # %%
 def window(size):
