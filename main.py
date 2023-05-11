@@ -189,12 +189,11 @@ def calc_a(r):
     a = F
     return a
 
-def leapfrog_step(r,v,dt):
-    a = calc_a(r)
-    v = v + a*dt/2
-    r = r + v*dt
-    a = calc_a(r)
-    v = v + a*dt/2
+def velocity_verlet(r,v,dt):
+    a1 = calc_a(r)
+    r = r + v*dt + a1/2 * dt**2
+    a2 = calc_a(r)
+    v = v + (a1+a2)/2*dt
     return r,v
 
 def wall_boundary_conds(r,v):
@@ -206,7 +205,7 @@ def boundary_conds(r,v):
     return wall_boundary_conds(r,v)
 
 def step_state(r,v,dt):
-    r,v = leapfrog_step(r,v,dt)
+    r,v = velocity_verlet(r,v,dt)
     r,v = boundary_conds(r,v)
     return r,v
 
