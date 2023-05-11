@@ -64,40 +64,34 @@ plt.show()
 # SET UP RANDOM INITIAL CONDITIONS
 rng = np.random.default_rng(seed=102)
 
-# EPSILON = 1
-# SIGMA = 1
-# M = 1
 X_U_MIN = 2**(1/6)*1
-CONTAINER_FACTOR = 1.5
-LATTICE_CONSTANT = 1.2
-
-L = 3
-N = L*L
+N_L = 10
+N = N_L*N_L
 DIM = 2
-X_LOWER,X_UPPER = -(L/2)*CONTAINER_FACTOR,(L/2)*CONTAINER_FACTOR
-X_LATTICE_LOWER,X_LATTICE_UPPER = -(L/2)*LATTICE_CONSTANT,(L/2)*LATTICE_CONSTANT
-# V_LOWER,V_UPPER = -0.1, 0.1
-V_SPREAD = 1
-# create random x and y coordinates for each particle, between 0 and 1
-# r = rng.uniform(X_LOWER, X_UPPER, (DIM,N))
-# r = rng.uniform(X_LOWER, X_UPPER, (DIM,N))
 
-def generate_square_lattice(A,B):
-    return np.meshgrid(*[np.linspace(X_LATTICE_LOWER,X_LATTICE_UPPER,L) for i in range(DIM)])
+DENSITY = 0.5
+LINEAR_DENSITY = DENSITY**(1/DIM)
+L = N_L / LINEAR_DENSITY
+print(L)
 
+def generate_square_lattice(l,n):
+    step = l / n
+    # generate matrices of lattice coordinates
+    rmat = np.meshgrid(*[np.arange(0,L,step)+step/2 for i in range(DIM)])
+    # convert matrices of x and y positions to vectors of x and y positions, and return
+    return np.vstack(list(map(np.concatenate,rmat)))
 
-r = generate_square_lattice(L,L)
-# print(r)
-r = np.vstack(list(map(np.concatenate,r)))
-# print(r)
+# generate lattice positions
+r = generate_square_lattice(L,N_L)
+# add small random displacements
 r += np.random.uniform(-0.1,0.1,r.shape)
 
-# r = np.array([[0,0],[0.5,1],[1,0.3]]).T
-# v = rng.uniform(V_LOWER, V_UPPER, (DIM,N))
+V_SPREAD = 3
 v = rng.normal(0, V_SPREAD, (DIM,N))
+
 plt.title("Particles")
-plt.xlim(X_LOWER, X_UPPER)
-plt.ylim(X_LOWER, X_UPPER)
+plt.xlim(0, L)
+plt.ylim(0, L)
 plt.xlabel("x (a.u.)")
 plt.ylabel("y (a.u.)")
 plt.gca().set_aspect('equal')
@@ -136,7 +130,7 @@ lj_forces = lj_F_vec(displacements)
 lj_forces[np.isnan(lj_forces)] = 0
 print(lj_forces.shape)
 net_lj_force = lj_forces.sum(axis=2)
-print(net_lj_force)
+print(net_lj_force.shape)
 
 # plt.quiver(np.repeat(r[0],N),np.repeat(r[1],N), displacements[0,:,:].ravel(),displacements[1,:,:].ravel(), angles="xy", scale=1, scale_units="xy")
 def plot_each_arrow(r,A,color=None):
@@ -148,29 +142,30 @@ def plot_each_arrow(r,A,color=None):
         angles="xy", scale=1, scale_units="xy")
 # plot_each_arrow(r,lj_forces,magnitudes(lj_forces))
 # plt.show()
-plt.title("Displacement Vectors")
-plt.xlabel("x (a.u.)")
-plt.ylabel("y (a.u.)")
-plot_each_arrow(r,displacements,magnitudes(displacements))
-plt.show()
 
-plt.title("Lennard-Jones Force Vectors")
-plt.xlim(X_LOWER*1.2, X_UPPER*1.2)
-plt.ylim(X_LOWER*1.2, X_UPPER*1.2)
-plt.xlabel("x (a.u.)")
-plt.ylabel("y (a.u.)")
-plot_each_arrow(
-    r,
-    lj_forces / magnitudes(lj_forces),
-    np.clip(magnitudes(lj_forces),0,1),
-)
-plt.colorbar()
-plt.text(X_LOWER,X_LOWER, "Forces are clipped with upper bound 1")
-plt.show()
+# plt.title("Displacement Vectors")
+# plt.xlabel("x (a.u.)")
+# plt.ylabel("y (a.u.)")
+# plot_each_arrow(r,displacements,magnitudes(displacements))
+# plt.show()
+
+# plt.title("Lennard-Jones Force Vectors")
+# plt.xlim(0, L)
+# plt.ylim(0, L)
+# plt.xlabel("x (a.u.)")
+# plt.ylabel("y (a.u.)")
+# plot_each_arrow(
+#     r,
+#     lj_forces / magnitudes(lj_forces),
+#     np.clip(magnitudes(lj_forces),0,1),
+# )
+# plt.colorbar()
+# plt.text(L*0.1,L*0.1, "Forces are clipped with upper bound 1")
+# plt.show()
 
 plt.title("Lennard-Jones Net Force Vectors")
-plt.xlim(X_LOWER*1.2, X_UPPER*1.2)
-plt.ylim(X_LOWER*1.2, X_UPPER*1.2)
+plt.xlim(0, L)
+plt.ylim(0, L)
 plt.xlabel("x (a.u.)")
 plt.ylabel("y (a.u.)")
 plt.quiver(*r, *net_lj_force, angles="xy", )
@@ -184,9 +179,6 @@ def calc_F_lj(r):
     lj_forces[np.isnan(lj_forces)] = 0
     net_lj_force = lj_forces.sum(axis=2)
     return net_lj_force
-
-def calc_F_bounds(r):
-    return -np.heaviside(X_LOWER-r,0)*(r-X_LOWER)**10 + -np.heaviside(r-X_UPPER,0)*(r-X_UPPER)**10
 
 def calc_a(r):
     F_lj = calc_F_lj(r)
@@ -206,8 +198,8 @@ def leapfrog_step(r,v,dt):
     return r,v
 
 def wall_boundary_conds(r,v):
-    v *= 1 - (np.heaviside(r-X_UPPER,0) * np.heaviside(v,0))*2
-    v *= 1 - (np.heaviside(X_LOWER-r,0) * np.heaviside(-v,0))*2
+    v *= 1 - (np.heaviside(r-L,0) * np.heaviside(v,0))*2
+    v *= 1 - (np.heaviside(-r,0) * np.heaviside(-v,0))*2
     return r,v
 
 def boundary_conds(r,v):
@@ -240,8 +232,8 @@ fig, ax = plt.subplots(1,1, figsize=(5,5))
 def animation_frame(i):
     ax.clear()
     ax.scatter(*rs[i])
-    ax.set_xlim(X_LOWER, X_UPPER)
-    ax.set_ylim(X_LOWER, X_UPPER)
+    ax.set_xlim(0, L)
+    ax.set_ylim(0, L)
 
 lj_anim = animation.FuncAnimation(fig, animation_frame, frames=steps, interval=10)
 lj_anim.save("test.gif", writer="pillow", fps=30, dpi=100)
