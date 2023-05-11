@@ -180,7 +180,6 @@ def calc_U_av(r):
 
 def calc_F_lj(r):
     global N
-    # unit_displacements = pair_displacements(r) / pair_distances(r)
     displacements = pair_displacements(r)
     diag_mask = np.identity(N,dtype=int)==1
 
@@ -190,13 +189,7 @@ def calc_F_lj(r):
     return net_lj_force
 
 def calc_a(r):
-    F_lj = calc_F_lj(r)
-    # F_grav = np.array([0,-0.5])
-    F = F_lj 
-    # F_bounds = calc_F_bounds(r)
-    # F += F_bounds
-    a = F
-    return a
+    return calc_F_lj(r)
 
 def velocity_verlet(r,v,dt):
     a1 = calc_a(r)
@@ -233,7 +226,7 @@ def time_evolution(r,v,steps,dt):
     return rs, vs
 
 # %%
-t_total,dt = 2,0.001
+t_total,dt = 10,0.001
 steps = int(t_total//dt)
 rs, vs = time_evolution(r,v,steps,dt)
 
@@ -254,14 +247,37 @@ lj_anim.save("test.gif", writer="pillow", fps=30, dpi=100)
 
 # %%
 t = np.arange(steps)*dt
-
 KE_t = (vs**2).sum(axis=(1,2))/N/2
-plt.plot(t,np.log(KE_t))
-plt.show()
-
 U_t = np.array([calc_U_av(r) for r in rs])
-plt.plot(t,np.log(U_t))
-plt.show()
+
+# %%
+def window(size):
+    return np.ones(size)/float(size)
+
+fig1,(ax1,ax2,ax3) = plt.subplots(1,3)
+ax1.plot(t,KE_t)
+ax1.plot(t, np.convolve(KE_t, window(1000),'same'))
+ax1.set_ylabel("KE")
+ax1.set_xlabel("t")
+
+ax2.plot(t,U_t)
+ax2.plot(t, np.convolve(U_t, window(1000),'same'))
+ax2.set_ylabel("U")
+ax2.set_xlabel("t")
+
+E_t = KE_t + U_t
+ax3.plot(t,E_t)
+ax3.plot(t, np.convolve(E_t, window(1000),'same'))
+ax3.set_ylabel("E")
+ax3.set_xlabel("t")
+
+fig1.suptitle("Energy")
+fig1.subplots_adjust(top=0.90)
+fig1.set_size_inches(12,4)
+fig1.tight_layout(pad=1)
+fig1.show()
+
+# %%
 
 
 
