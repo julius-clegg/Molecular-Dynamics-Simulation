@@ -14,6 +14,7 @@ warnings.filterwarnings("ignore")
 # $$
 # U(r_{ij}) = 4\varepsilon [(\sigma/r_{ij})^{12} - (\sigma/r_{ij})^6] \\
 # U^*(r_{ij}) = 4[(r_{ij}^*)^{-12} - (r_{ij}^*)^{-6}] \\
+# \phantom{U^*(r_{ij})} = 4[(r_{ij}^*)^{-6} - 1](r_{ij}^*)^{-6} \\
 # $$
 # Force atom $j$ exerts on $i$
 # $$
@@ -24,22 +25,22 @@ warnings.filterwarnings("ignore")
 def magnitude2(x):
     return (x*x).sum(axis=0)
 
-def lj_U(x):
+def f_U_lj(x):
     return 4*(x**-6 - 1)*x**-6
 
-def lj_U_vec(r):
+def f_U_lj_vec(r):
     r2 = magnitude2(r)
     return 4*(r2**-3 - 1)*r2**-3
 
-def lj_F_vec(r):
+def f_F_lj_vec(r):
     r2 = magnitude2(r)
     return -48*(r2**-3 - 0.5)*r2**-4 * r
 
 print("testing with r as [xs, ys]")
 r = np.array([[1,2,3],[2,3,4]], dtype=float)
 print(magnitude2(r))
-print(lj_U_vec(r))
-print(lj_F_vec(r))
+print(f_U_lj_vec(r))
+print(f_F_lj_vec(r))
 
 print()
 print("testing with r as [x matrix, y matrix]")
@@ -48,11 +49,11 @@ rmat = np.array([
     [[2,3,4],[2,3,4],[2,3,4]],
 ], dtype=float)
 print(magnitude2(rmat))
-print(lj_U_vec(rmat))
-print(lj_F_vec(rmat))
+print(f_U_lj_vec(rmat))
+print(f_F_lj_vec(rmat))
 
 x = np.linspace(0.95,4,100)
-plt.plot(x,lj_U(x))
+plt.plot(x,f_U_lj(x))
 
 plt.title("Lennard-Jones Potential vs Distance")
 plt.xlabel("Distance r (a.u.)")
@@ -77,7 +78,7 @@ print(L)
 def generate_square_lattice(l,n):
     step = l / n
     # generate matrices of lattice coordinates
-    rmat = np.meshgrid(*[np.arange(0,L,step)+step/2 for i in range(DIM)])
+    rmat = np.meshgrid(*[np.arange(0,l,step)+step/2 for i in range(DIM)])
     # convert matrices of x and y positions to vectors of x and y positions, and return
     return np.vstack(list(map(np.concatenate,rmat)))
 
@@ -86,7 +87,7 @@ r = generate_square_lattice(L,N_L)
 # add small random displacements
 r += np.random.uniform(-0.1,0.1,r.shape)
 
-V_SPREAD = 3
+V_SPREAD = 5
 v = rng.normal(0, V_SPREAD, (DIM,N))
 
 plt.title("Particles")
@@ -116,19 +117,19 @@ def pair_distances(r):
 
 displacements = pair_displacements(r)
 
-print(displacements.shape)
+diag_mask = np.identity(N,dtype=int)==1
 
-potential_energies = lj_U_vec(displacements)
-potential_energies[~np.isfinite(potential_energies)] = 0
-potential_energy = potential_energies.sum()
-potential_energy_av = potential_energy / N
-print(potential_energy_av)
+Us = f_U_lj_vec(displacements)
+Us[diag_mask] = 0
+U = Us.sum()
+U_av = U / N
+print(U_av)
 
-lj_forces = lj_F_vec(displacements)
-lj_forces[np.isnan(lj_forces)] = 0
-print(lj_forces.shape)
-net_lj_force = lj_forces.sum(axis=2)
-print(net_lj_force.shape)
+F_lj = f_F_lj_vec(displacements)
+F_lj[:,diag_mask] = 0
+print(F_lj.shape)
+F_net = F_lj.sum(axis=2)
+print(F_net.shape)
 
 # plt.quiver(np.repeat(r[0],N),np.repeat(r[1],N), displacements[0,:,:].ravel(),displacements[1,:,:].ravel(), angles="xy", scale=1, scale_units="xy")
 def plot_each_arrow(r,A,color=None):
@@ -166,21 +167,31 @@ plt.xlim(0, L)
 plt.ylim(0, L)
 plt.xlabel("x (a.u.)")
 plt.ylabel("y (a.u.)")
-plt.quiver(*r, *net_lj_force, angles="xy", )
+plt.quiver(*r, *F_net, angles="xy", )
 plt.show()
 
 # %%
+def calc_U_av(r):
+    global N
+    displacements = pair_displacements(r)
+    Us = f_U_lj_vec(displacements)
+    Us[diag_mask] = 0
+    return Us.sum() / N
+
 def calc_F_lj(r):
+    global N
     # unit_displacements = pair_displacements(r) / pair_distances(r)
     displacements = pair_displacements(r)
-    lj_forces = lj_F_vec(displacements)
-    lj_forces[np.isnan(lj_forces)] = 0
+    diag_mask = np.identity(N,dtype=int)==1
+
+    lj_forces = f_F_lj_vec(displacements)
+    lj_forces[:,diag_mask] = 0
     net_lj_force = lj_forces.sum(axis=2)
     return net_lj_force
 
 def calc_a(r):
     F_lj = calc_F_lj(r)
-    F_grav = np.array([0,-0.5])
+    # F_grav = np.array([0,-0.5])
     F = F_lj 
     # F_bounds = calc_F_bounds(r)
     # F += F_bounds
@@ -222,22 +233,35 @@ def time_evolution(r,v,steps,dt):
     return rs, vs
 
 # %%
-t,dt = 2,0.01
-steps = int(t//dt)
+t_total,dt = 2,0.001
+steps = int(t_total//dt)
 rs, vs = time_evolution(r,v,steps,dt)
 
 # %%
 fig, ax = plt.subplots(1,1, figsize=(5,5))
 points = ax.scatter(*rs[0])
+
+k = int(0.01//dt)
+nframes = steps // k
+
 ax.set_xlim(0, L)
 ax.set_ylim(0, L)
 def animation_frame(i):
-    points.set_offsets(rs[i].T)
+    points.set_offsets(rs[i*k].T)
 
-lj_anim = animation.FuncAnimation(fig, animation_frame, frames=steps)
+lj_anim = animation.FuncAnimation(fig, animation_frame, frames=nframes)
 lj_anim.save("test.gif", writer="pillow", fps=30, dpi=100)
 
 # %%
+t = np.arange(steps)*dt
+
+KE_t = (vs**2).sum(axis=(1,2))/N/2
+plt.plot(t,np.log(KE_t))
+plt.show()
+
+U_t = np.array([calc_U_av(r) for r in rs])
+plt.plot(t,np.log(U_t))
+plt.show()
 
 
 
