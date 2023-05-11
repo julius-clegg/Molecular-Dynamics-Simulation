@@ -101,8 +101,9 @@ plt.show()
 # %%
 x = r[0]
 def pair_displacements_1D(x):
-    return -np.diff(np.meshgrid(x,x),axis=0)[0]
-    # return np.diff(np.asarray(combinations(x,2)),axis=1).ravel()
+    x = -np.diff(np.meshgrid(x,x),axis=0)[0]
+    x = (L/2+x)%L-L/2
+    return x
 
 def pair_displacements(r):
     return np.array([pair_displacements_1D(x) for x in r])
@@ -114,17 +115,14 @@ def pair_distances(r):
     return magnitudes(pair_displacements(r))
 
 displacements = pair_displacements(r)
-distances = pair_distances(r) # dont use
-# unit_displacements = pair_displacements(r) / pair_distances(r)
-# unit_displacements[np.isnan(unit_displacements)] = 0
 
 print(displacements.shape)
 
 potential_energies = lj_U_vec(displacements)
-# potential_energies[np.isnan(potential_energies)] = 0
+potential_energies[~np.isfinite(potential_energies)] = 0
 potential_energy = potential_energies.sum()
 potential_energy_av = potential_energy / N
-# print(potential_energy_av)
+print(potential_energy_av)
 
 lj_forces = lj_F_vec(displacements)
 lj_forces[np.isnan(lj_forces)] = 0
@@ -201,8 +199,12 @@ def wall_boundary_conds(r,v):
     v *= 1 - (np.heaviside(-r,0) * np.heaviside(-v,0))*2
     return r,v
 
+def periodic_boundary_wrap(r,v):
+    r %= L
+    return r,v
+
 def boundary_conds(r,v):
-    return wall_boundary_conds(r,v)
+    return periodic_boundary_wrap(r,v)
 
 def step_state(r,v,dt):
     r,v = velocity_verlet(r,v,dt)
@@ -213,12 +215,10 @@ def step_state(r,v,dt):
 def time_evolution(r,v,steps,dt):
     rs = np.zeros((steps,r.shape[0], r.shape[1]))
     vs = np.zeros((steps,r.shape[0], r.shape[1]))
-    rs[0] = r
-    vs[0] = v
-    for i in range(1,steps):
-        r,v = step_state(r,v,dt)
+    for i in range(steps):
         rs[i] = r
         vs[i] = v
+        r,v = step_state(r,v,dt)
     return rs, vs
 
 # %%
@@ -228,13 +228,13 @@ rs, vs = time_evolution(r,v,steps,dt)
 
 # %%
 fig, ax = plt.subplots(1,1, figsize=(5,5))
+points = ax.scatter(*rs[0])
+ax.set_xlim(0, L)
+ax.set_ylim(0, L)
 def animation_frame(i):
-    ax.clear()
-    ax.scatter(*rs[i])
-    ax.set_xlim(0, L)
-    ax.set_ylim(0, L)
+    points.set_offsets(rs[i].T)
 
-lj_anim = animation.FuncAnimation(fig, animation_frame, frames=steps, interval=10)
+lj_anim = animation.FuncAnimation(fig, animation_frame, frames=steps)
 lj_anim.save("test.gif", writer="pillow", fps=30, dpi=100)
 
 # %%
