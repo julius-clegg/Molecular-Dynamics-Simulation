@@ -213,12 +213,12 @@ def step_state(r,v,dt):
 def time_evolution(r,v,steps,dt):
     rs = np.zeros((steps,r.shape[0], r.shape[1]))
     vs = np.zeros((steps,r.shape[0], r.shape[1]))
-    rs[0] = r.copy()
-    vs[0] = v.copy()
+    rs[0] = r
+    vs[0] = v
     for i in range(1,steps):
         r,v = step_state(r,v,dt)
-        rs[i] = r.copy()
-        vs[i] = v.copy()
+        rs[i] = r
+        vs[i] = v
     return rs, vs
 
 # %%
